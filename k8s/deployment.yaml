@@ -1,48 +1,74 @@
+
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: stateinfo-mcp
+  name: stateinfomcp
+  labels:
+    app: stateinfomcp
 spec:
   replicas: 1
+  strategy:
+    type: RollingUpdate
   selector:
     matchLabels:
-      app: stateinfo-mcp
+      app: stateinfomcp
   template:
     metadata:
       labels:
-        app: stateinfo-mcp
+        app: stateinfomcp
     spec:
       containers:
-        - name: stateinfo-mcp
-          image: REPLACE_ACR_NAME.azurecr.io/stateinfo-mcp:latest
+        - name: stateinfomcp
+          image: IMAGE_PLACEHOLDER
+          imagePullPolicy: IfNotPresent
+
           ports:
-            - containerPort: 8001
+            - name: http
+              containerPort: 8001
+
           env:
+            - name: MCP_HOST
+              value: "0.0.0.0"
             - name: PORT
               value: "8001"
             - name: STATEINFO_API_BASE_URL
-              value: "http://REPLACE_STATEINFO_API_SERVICE:8000"
+              value: "http://4.249.235.43"
+
+          startupProbe:
+            tcpSocket:
+              port: 8001
+            periodSeconds: 5
+            failureThreshold: 24
+
           readinessProbe:
             tcpSocket:
               port: 8001
-            initialDelaySeconds: 5
             periodSeconds: 10
+
+          livenessProbe:
+            tcpSocket:
+              port: 8001
+            periodSeconds: 20
+
           resources:
             requests:
-              cpu: 100m
-              memory: 128Mi
+              cpu: "100m"
+              memory: "128Mi"
             limits:
-              cpu: 500m
-              memory: 512Mi
+              cpu: "500m"
+              memory: "512Mi"
+
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: stateinfo-mcp
+  name: stateinfomcp
 spec:
   type: ClusterIP
   selector:
-    app: stateinfo-mcp
+    app: stateinfomcp
   ports:
-    - port: 8001
+    - name: http
+      port: 8001
       targetPort: 8001
+      protocol: TCP

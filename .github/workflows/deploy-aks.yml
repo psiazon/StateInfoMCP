@@ -1,0 +1,125 @@
+
+name: StateInfoMCP - Deploy to AKS
+
+on:
+  push:
+    branches:
+      - main
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: stateinfomcp-aks-production
+  cancel-in-progress: false
+
+env:
+  RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+  AKS_CLUSTER: ${{ vars.AKS_CLUSTER_NAME }}
+  ACR_NAME: ${{ vars.ACR_NAME }}
+  NAMESPACE: ${{ vars.K8S_NAMESPACE }}
+  IMAGE_NAME: stateinfomcp
+
+jobs:
+  deploy:
+    name: Build and Deploy StateInfoMCP
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # 1. Checkout latest main
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      # 2. Setup Python
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # 3. Install dependencies
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+
+      # 4. Execute unit tests
+      - name: Run tests
+        run: |
+          python -m pytest -q
+
+      # 5. Authenticate to Azure with OIDC
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      # 6. Login to ACR
+      - name: Login to ACR
+        run: |
+          az acr login --name "$ACR_NAME"
+
+      # 7. Build and push immutable Docker image
+      - name: Build and Push Image
+        run: |
+          IMAGE="$ACR_NAME.azurecr.io/$IMAGE_NAME:$GITHUB_SHA"
+
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+
+      # 8. Install Kubernetes tooling
+      - name: Install kubectl and kubelogin
+        uses: azure/setup-kubectl@v4
+
+      - name: Install kubelogin
+        uses: azure/use-kubelogin@v1
+
+      # 9. Connect to AKS
+      - name: Get AKS Credentials
+        run: |
+          az aks get-credentials \
+            --resource-group "$RESOURCE_GROUP" \
+            --name "$AKS_CLUSTER" \
+            --overwrite-existing
+
+          kubelogin convert-kubeconfig -l azurecli
+
+      # 10. Deploy new image to Kubernetes
+      - name: Deploy StateInfoMCP
+        run: |
+          sed "s|IMAGE_PLACEHOLDER|$IMAGE|g" \
+            k8s/deployment.yaml \
+            > /tmp/stateinfomcp-deployment.yaml
+
+          kubectl apply \
+            -n "$NAMESPACE" \
+            -f /tmp/stateinfomcp-deployment.yaml
+
+      # 11. Wait for rollout
+      - name: Verify Deployment
+        run: |
+          kubectl rollout status \
+            deployment/stateinfomcp \
+            -n "$NAMESPACE" \
+            --timeout=300s
+
+      # 12. Display status
+      - name: Show Deployment Status
+        run: |
+          kubectl get deployment stateinfomcp \
+            -n "$NAMESPACE"
+
+          kubectl get pods \
+            -n "$NAMESPACE" \
+            -l app=stateinfomcp
+
+          kubectl get service stateinfomcp \
+            -n "$NAMESPACE"
