@@ -32,7 +32,7 @@ spec:
             - name: PORT
               value: "8001"
             - name: STATEINFO_API_BASE_URL
-              value: "http://stateinfowebapi:8000"
+              value: "http://4.249.235.43"
 
           startupProbe:
             tcpSocket:
