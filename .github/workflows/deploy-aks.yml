@@ -93,7 +93,16 @@ jobs:
             --overwrite-existing
 
           kubelogin convert-kubeconfig -l azurecli
-
+      
+      - name: Verify AKS Permissions
+        run: |
+          kubectl auth can-i get deployments -n default
+          kubectl auth can-i create deployments -n default
+          kubectl auth can-i patch deployments -n default
+          kubectl auth can-i get services -n default
+          kubectl auth can-i create services -n default
+          kubectl auth can-i patch services -n default
+          
       # 10. Deploy new image to Kubernetes
       - name: Deploy StateInfoMCP
         run: |
