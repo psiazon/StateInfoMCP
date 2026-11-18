@@ -81,7 +81,9 @@ jobs:
 
       - name: Install kubelogin
         uses: azure/use-kubelogin@v1
-
+        with:
+          kubelogin-version: 'v0.2.12'
+    
       # 9. Connect to AKS
       - name: Get AKS Credentials
         run: |
